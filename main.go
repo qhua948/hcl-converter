@@ -10,9 +10,9 @@ import (
 	"os"
 
 	yaml "github.com/ghodss/yaml"
-	hcl "github.com/hashicorp/hcl"
-	hclPrinter "github.com/hashicorp/hcl/hcl/printer"
-	jsonParser "github.com/hashicorp/hcl/json/parser"
+	"github.com/hashicorp/hcl/v2/gohcl"
+	hclParser "github.com/hashicorp/hcl/v2/hclparse"
+	"github.com/hashicorp/hcl/v2/hclwrite"
 )
 
 // Format type
@@ -37,7 +37,7 @@ func main() {
 
 	object, err := readIn(os.Stdin, cfg.formatFrom)
 
-	fmt.Println("%+v", object)
+	fmt.Printf("%+v", object)
 
 	if err != nil {
 		fmt.Printf("Unable to parse the input, %s", err)
@@ -85,27 +85,6 @@ func printJSON(file *os.File, obj interface{}) error {
 }
 
 func printHCL(file *os.File, obj interface{}) error {
-	// TODO: Find a way to Marshal HCL directly
-	jsonOut, err := json.Marshal(obj)
-
-	if err != nil {
-		return fmt.Errorf("Unable to Marshal json: %s", err)
-	}
-
-	hclAST, err := jsonParser.Parse(jsonOut)
-
-	if err != nil {
-		return fmt.Errorf("Unable to Parse JSON to hclAST: %s", err)
-	}
-
-	err = hclPrinter.Fprint(file, hclAST)
-	// Extra newline to be consistent
-	fmt.Println()
-
-	if err != nil {
-		return fmt.Errorf("Unable to print HCL: %s", err)
-	}
-
 	return nil
 }
 
@@ -137,12 +116,23 @@ func readIn(file *os.File, format Format) (interface{}, error) {
 }
 
 func readHCL(input []byte) (interface{}, error) {
-	var buffer interface{}
+	var buffer map[interface{}]interface{}
 
-	err := hcl.Unmarshal(input, &buffer)
+	hclFile, err := hclParser.NewParser().ParseHCL(input, "bogus")
 	if err != nil {
 		return nil, fmt.Errorf("Unable to parse HCL: %s", err)
 	}
+
+	gohcl.DecodeBody(hclFile.Body, nil, &buffer)
+
+	newf := hclwrite.NewEmptyFile()
+
+	// gohcl.EncodeIntoBody(buffer, newf.Body())
+
+	fmt.Printf("%s", newf.Bytes())
+	r := hclwrite.Format(newf.Bytes())
+
+	fmt.Println(r)
 
 	return buffer, nil
 }
